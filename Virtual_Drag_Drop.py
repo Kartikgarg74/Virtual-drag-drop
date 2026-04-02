@@ -1,83 +1,95 @@
-#Virtual Drag Drop project 
-#cvzone model used 1.4.1
+# Virtual Drag Drop project
+# cvzone model used 1.4.1
 
 import cv2
 import cvzone
 from cvzone.HandTrackingModule import HandDetector
-import numpy as np 
+import numpy as np
+
+# Camera resolution constants
+CAMERA_WIDTH = 1280
+CAMERA_HEIGHT = 720
+
+# Detection and gesture constants
+DETECTION_CONFIDENCE = 1.0
+NUM_RECTANGLES = 5
+RECT_SPACING = 250
+RECT_START_X = 150
+RECT_START_Y = 150
+GESTURE_DISTANCE_THRESHOLD = 40
+OVERLAY_ALPHA = 0.5
+
+# Drawing color
+color = (255, 0, 255)
 
 cap = cv2.VideoCapture(0)
-cap.set(3,1280)
-cap.set(4,720)
+if not cap.isOpened():
+    print("Error: Could not open camera.")
+    exit(1)
 
-detector=HandDetector(detectionCon=1)
-color=(255,0,255)
+cap.set(3, CAMERA_WIDTH)
+cap.set(4, CAMERA_HEIGHT)
 
-cx,cy,w,h=100,100,200,200
+detector = HandDetector(detectionCon=DETECTION_CONFIDENCE)
+
 
 class DragRect():
-    def __init__(self,posCenter,size=[200,200]):
-        self.posCenter=posCenter
-        self.size=size
-    def update(self,cursor):
-        cx,cy=self.posCenter
-        w,h=self.size
+    def __init__(self, posCenter, size=None):
+        if size is None:
+            size = [200, 200]
+        self.posCenter = posCenter
+        self.size = size
 
-        #If the index fingure tip is in the rectangle region 
-        if cx-w//2<cursor[0]<cx+w//2 and cy-h//2<cursor[1]<cy+h//2:
-                color = 0,255,0
-                self.posCenter=cursor
+    def update(self, cursor):
+        cx, cy = self.posCenter
+        w, h = self.size
 
-#for multiple rectangles
-rectList=[]
-for x in range(5):
-    rectList.append(DragRect([x*250+150,150]))
+        # If the index finger tip is in the rectangle region
+        if cx - w // 2 < cursor[0] < cx + w // 2 and cy - h // 2 < cursor[1] < cy + h // 2:
+            self.posCenter = cursor
+            return True
+        return False
+
+
+# For multiple rectangles
+rectList = []
+for x in range(NUM_RECTANGLES):
+    rectList.append(DragRect([x * RECT_SPACING + RECT_START_X, RECT_START_Y]))
 
 while True:
     success, img = cap.read()
-    img=cv2.flip(img,1)
-    img= detector.findHands(img)
+    if not success:
+        break
+
+    img = cv2.flip(img, 1)
+    img = detector.findHands(img)
     lmsList, _ = detector.findPosition(img)
-    
-    if lmsList:
 
-        len,_,_=detector.findDistance(8,12,img,draw=False)
+    if lmsList and len(lmsList) > 12:
+        result = detector.findDistance(8, 12, img, draw=False)
+        if result is not None:
+            dist, _, _ = result
 
-        #print(len) #it helps us in finding the minimum value which is required 
-        #for value which we will put in the findDistance
+            if dist < GESTURE_DISTANCE_THRESHOLD:
+                cursor = lmsList[8]  # index finger tip landmark
+                for rect in rectList:
+                    rect.update(cursor)
 
-        if len < 40:
-            cursor=lmsList[8] #index finger tip landmark
-            for rect in rectList:
-                #print(1)
-                rect.update(cursor) 
-                #print(2)
-                #print(1) and print(2) is to crossverify that the update command is working
-
-    #to draw  solid 
-    # for rect in rectList:
-    #     cx,cy=rect.posCenter
-    #     w,h = rect.size
-    #     cv2.rectangle(img,(cx-w//2,cy-h//2),(cx+w//2,cy+h//2),color,cv2.FILLED)
-        
-    #     #cvzone.cornerRect(img,(cx-w//2,cy-h//2,w,h),20,rt=0) 
-    #     #this is used to provide the corner lines in a shape of rectangles 
-    
-    # cv2.imshow("Image",img)
-    # cv2.waitKey(1)
-
-    
-    #to draw transparent
-    imgNew=np.zeros_like(img,np.uint8)
+    # Draw transparent overlay
+    imgNew = np.zeros_like(img, np.uint8)
     for rect in rectList:
-        cx,cy=rect.posCenter
-        w,h = rect.size
-        cv2.rectangle(imgNew,(cx-w//2,cy-h//2),(cx+w//2,cy+h//2),color,cv2.FILLED)
-        cvzone.cornerRect(imgNew,(cx-w//2,cy-h//2,w,h),20,rt=0) 
-    out=img.copy()
-    alpha=.5
-    mask=imgNew.astype(bool)
-    out[mask]=cv2.addWeighted(img,alpha,imgNew,1-alpha,0)[mask]
+        cx, cy = rect.posCenter
+        w, h = rect.size
+        cv2.rectangle(imgNew, (cx - w // 2, cy - h // 2), (cx + w // 2, cy + h // 2), color, cv2.FILLED)
+        cvzone.cornerRect(imgNew, (cx - w // 2, cy - h // 2, w, h), 20, rt=0)
 
-    cv2.imshow("Image",out)
-    cv2.waitKey(1)
+    out = img.copy()
+    mask = imgNew.astype(bool)
+    out[mask] = cv2.addWeighted(img, OVERLAY_ALPHA, imgNew, 1 - OVERLAY_ALPHA, 0)[mask]
+
+    cv2.imshow("Image", out)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
