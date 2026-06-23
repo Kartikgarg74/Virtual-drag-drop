@@ -33,7 +33,7 @@ cap.set(4, CAMERA_HEIGHT)
 detector = HandDetector(detectionCon=DETECTION_CONFIDENCE)
 
 
-class DragRect():
+class DragRect:
     def __init__(self, posCenter, size=None):
         if size is None:
             size = [200, 200]
@@ -47,8 +47,6 @@ class DragRect():
         # If the index finger tip is in the rectangle region
         if cx - w // 2 < cursor[0] < cx + w // 2 and cy - h // 2 < cursor[1] < cy + h // 2:
             self.posCenter = cursor
-            return True
-        return False
 
 
 # For multiple rectangles
